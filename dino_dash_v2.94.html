@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dino Dash (Animated Parallax Mountains)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- Tone.js for generating synthetic retro sound effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* Game Boy DMG Palette (Olive Green/Yellow-Green) */
+        :root {
+            --color-lightest: #9bbc0f;  /* 1. Screen Background (Sky) */
+            --color-light: #8bac0f;     /* 2. Light Detail (Ground dots, Near Hills) */
+            --color-dark: #306230;      /* 3. Main Art and Shading (Dino/Obstacles) */
+            --color-darkest: #0f380f;   /* 4. Darkest Outline and Text (Text/Body Background) */
+            --font-family-retro: 'Press Start 2P', cursive;
+        }
+
+        body {
+            /* Now using the darkest Game Boy green for the body background */
+            background-color: var(--color-darkest);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Full vertical centering */
+            margin: 0;
+            font-family: var(--font-family-retro);
+        }
+
+        .game-container {
+            /* Screen area uses the lightest green */
+            background-color: var(--color-lightest);
+            border: 8px solid var(--color-dark);
+            box-shadow: 0 0 0 12px var(--color-darkest);
+            border-radius: 4px;
+            overflow: hidden;
+            width: 100%;
+            max-width: 800px;
+            /* Ensure the height is fixed relative to the content */
+            aspect-ratio: 800 / 300; 
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            background-color: var(--color-lightest);
+            /* Important for preventing unwanted browser interactions on touch */
+            touch-action: none; 
+        }
+
+        /* New style for Top-Left Level Display */
+        #level-column {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            color: var(--color-darkest); 
+            flex-direction: row; 
+            align-items: center; 
+            gap: 4px; 
+        }
+        
+        #level-column .score-label {
+            margin-bottom: 0;
+        }
+
+        /* Centered container for Score/High Score block */
+        #score-block-container {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex; 
+            gap: 40px; 
+            color: var(--color-darkest);
+            justify-content: center; 
+        }
+        
+        .score-column {
+            display: flex;
+            flex-direction: column; 
+            align-items: center;
+            white-space: nowrap;
+            color: var(--color-darkest);
+        }
+
+        /* Standardized font size for all labels and values */
+        .score-label {
+            font-size: 10px; 
+            opacity: 0.8;
+            margin-bottom: 2px; 
+            text-transform: uppercase;
+        }
+
+        .score-value {
+            font-size: 10px; 
+        }
+        
+        #message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            background-color: var(--color-dark);
+            border: 4px solid var(--color-darkest);
+            color: var(--color-lightest);
+            text-align: center;
+            border-radius: 4px;
+            box-shadow: 4px 4px 0 var(--color-darkest);
+            z-index: 100;
+            cursor: pointer;
+            user-select: none;
+            line-height: 1.5;
+        }
+        
+        /* NEW: Style for instruction spans to enforce block display and spacing */
+        #message-box .instruction {
+            display: block;
+            margin-bottom: 4px; /* Adjust this value for desired spacing */
+        }
+        
+        /* --- UPDATED BUTTON STYLE FOR KEYS --- */
+        .key-button {
+            display: inline-block;
+            /* Updated padding: 4px top/bottom, 6px left/right (symmetric) */
+            padding: 4px 6px; 
+            border: 2px solid var(--color-darkest);
+            border-radius: 6px; /* Adjusted to 6px for a medium roundness */
+            background-color: var(--color-lightest);
+            color: var(--color-darkest);
+            margin: 0 2px; /* Small horizontal space between keys */
+            box-shadow: 1px 1px 0 var(--color-darkest); /* Slight shadow for depth */
+            line-height: 1; /* Ensure text sits nicely inside */
+        }
+        /* --------------------------------- */
+
+        #message-box h2 {
+            font-size: 1.2rem;
+            margin-bottom: 15px; 
+        }
+        
+        /* New style for the large score number */
+        #message-box .final-score-number {
+            font-size: 1.5rem; 
+            line-height: 1.0;
+            margin-top: 5px;
+            margin-bottom: 10px;
+        }
+        
+        #message-box .final-score-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            margin-bottom: 0;
+            line-height: 1.0;
+        }
+        
+        /* --- BLINK ANIMATION --- */
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
+        .blink-text {
+            /* Applies a smoother fade effect by changing timing function */
+            /* Changed 'step-end' to 'ease-in-out' for smoother fading */
+            animation: blink 1s ease-in-out infinite; 
+        }
+        /* ----------------------- */
+        
+        /* --- NEW: Copyright Footer Style --- */
+        #copyright-footer {
+            position: absolute;
+            bottom: 10px; /* Position slightly above the bottom edge */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            color: var(--color-darkest);
+            font-size: 8px; /* Very small, retro text */
+            opacity: 0.7;
+            pointer-events: none; /* Make sure it doesn't block clicks/touches */
+        }
+        /* --------------------------------- */
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- LEVEL Column -->
+        <div class="score-column hidden" id="level-column">
+            <span class="score-label" id="level-label">LEVEL</span>
+            <span class="score-value" id="level-value">1</span>
+        </div>
+
+        <!-- Score and High Score centered. -->
+        <div id="score-block-container">
+            <!-- Current Score Column -->
+            <div class="score-column hidden" id="current-score-column">
+                <span class="score-label" id="score-label">SCORE</span>
+                <span class="score-value" id="score-value">0</span>
+            </div>
+            
+            <!-- High Score Column -->
+            <div class="score-column">
+                <span class="score-label" id="high-score-label">HI SCORE</span>
+                <span class="score-value" id="high-score-value">0</span>
+            </div>
+        </div>
+
+        <div id="message-box" class="hidden">
+            <h2>DINO DASH</h2>
+            <p>Ready to start?</p>
+        </div>
+        
+        <!-- NEW: Copyright Footer (Shown only on initial screen) -->
+        <div id="copyright-footer" class="hidden">
+            <span class="copyright-text">© 2025 John Paw</span>
+        </div>
+    </div>
+
+<script>
+    // Global Constants
+    const CANVAS_WIDTH = 800;
+    const CANVAS_HEIGHT = 300;
+    const DINO_SIZE = 40;
+    const DINO_JUMP_VELOCITY = 15;
+    const GRAVITY = 0.8;
+    // Factor to increase gravity when jump key is released early, enabling variable jump height.
+    const JUMP_CUT_FACTOR = 1.8; 
+    const BASE_SPEED = 5;
+    const MAX_SPEED = 15; // Speed now capped at 15
+    const SPEED_INCREMENT_RATE = 0.2; // Speed increases by 0.2 every time the threshold is passed
+    const SCORE_THRESHOLD = 30; // The threshold is now 30 points (Level up interval)
+    
+    const ANIMATION_FRAME_RATE = 8;     // Dino running rate (8 FPS)
+    const BIRD_FLAP_RATE = 10;          // Bat wing flapping rate (10 FPS) - now independent
+    
+    const GROUND_LEVEL = CANVAS_HEIGHT; 
+    const GROUND_Y = GROUND_LEVEL - 2;
+
+    // Color Constants from CSS Root
+    const COLOR_LIGHTEST = getComputedStyle(document.documentElement).getPropertyValue('--color-lightest').trim(); // Sky/BG
+    const COLOR_LIGHT = getComputedStyle(document.documentElement).getPropertyValue('--color-light').trim();       // Near Hills/Ground Dots
+    const COLOR_DARK = getComputedStyle(document.documentElement).getPropertyValue('--color-dark').trim();         // Dino/Obstacles
+    const COLOR_DARKEST = getComputedStyle(document.documentElement).getPropertyValue('--color-darkest').trim();   // Text/Outlines
+    const COLOR_FARTHEST = '#a3c229'; // New Color for Distant Mountains
+    
+    // NEW: Debug Hitbox Colors
+    const HITBOX_DINO_COLOR = '#ff0073';
+    const HITBOX_OBSTACLE_COLOR = 'lime';
+
+    // Game State Variables
+    let canvas, ctx;
+    let dino;
+    let obstacles = [];
+    let parallaxLayers = []; // Array to hold the background layers
+    let gameSpeed = BASE_SPEED;
+    let isPlaying = false;
+    let score = 0;
+    let highScore = 0;
+    let level = 1; 
+    let lastThresholdPassed = 0; 
+    let audioReady = false;
+    let lastTime = 0; // Used for continuous loop time tracking
+    let isTouch = false; // Device detection flag
+    
+    // NEW: Hitbox Debug Toggle
+    let showHitBoxes = false; 
+    
+    // NEW: Reference to the copyright footer element
+    let copyrightFooter; 
+
+    // --- AUDIO FUNCTIONS ---
+
+    let jumpSynth, scoreSynth, crashNoise; 
+
+    function initAudio() {
+        if (audioReady) return;
+        
+        jumpSynth = new Tone.Synth({
+            oscillator: { type: "square" },
+            envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 }
+        }).toDestination();
+
+        // MODIFIED: Changed oscillator to 'sine' and volume to -12 for a softer chime
+        scoreSynth = new Tone.Synth({
+             oscillator: { type: "sine" }, 
+             envelope: { attack: 0.005, decay: 0.15, sustain: 0, release: 0.15 }, 
+             volume: -12 // Lowered volume for a softer effect
+        }).toDestination();
+
+        crashNoise = new Tone.NoiseSynth({
+            noise: { type: "white" },
+            envelope: { attack: 0.005, decay: 0.5, sustain: 0, release: 0.5 },
+            volume: -5
+        }).toDestination();
+        
+        audioReady = true;
+    }
+
+    function playJumpSound() {
+        if (audioReady) {
+            jumpSynth.triggerAttackRelease("C5", "8n");
+        }
+    }
+
+    function playScoreSound() {
+        if (audioReady) {
+            const now = Tone.now();
+            const duration1 = "32n"; // Very short 'Ta'
+            const duration2 = "16n"; // Slightly longer 'Da'
+            const delay = 0.06; // 60ms delay between notes
+            
+            // 1. "Ta" (Lower note, F5)
+            scoreSynth.triggerAttackRelease("F5", duration1, now);
+            
+            // 2. "Da" (Higher note, C6)
+            scoreSynth.triggerAttackRelease("C6", duration2, now + delay);
+        }
+    }
+
+    function playGameOverSound() {
+        if (audioReady) {
+            crashNoise.triggerAttackRelease("4n");
+        }
+    }
+    
+    // --- UPDATED: DEVICE DETECTION & INSTRUCTION GENERATION ---
+
+    function isTouchDevice() {
+        return (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0));
+    }
+    
+    function getInstructions(isGameOver = false) {
+        let jumpInstruction;
+        let duckInstruction;
+        
+        const startRestartInstruction = "TAP TO START"; 
+        
+        if (isTouch) {
+            jumpInstruction = '<span class="instruction">JUMP: Tap Left Screen</span>';
+            duckInstruction = '<span class="instruction">DUCK: Tap Right Screen</span>';
+        } else {
+            // New: Apply the .key-button class to the keys
+            const upArrow = '<span class="key-button">↑</span>';
+            const spaceKey = '<span class="key-button">Space</span>';
+            const downArrow = '<span class="key-button">↓</span>';
+            const dKey = '<span class="key-button">D</span>';
+            
+            jumpInstruction = `<span class="instruction">JUMP: ${upArrow} / ${spaceKey}</span>`;
+            duckInstruction = `<span class="instruction">DUCK: ${downArrow} / ${dKey}</span>`;
+        }
+        
+        // Combine the instructions using a space (the block display and margin will handle the vertical separation)
+        const combinedInstructions = jumpInstruction + ' ' + duckInstruction;
+
+        if (isGameOver) {
+            // For game over, we only need the restart instruction, which is unified
+             return "TAP TO RESTART";
+        }
+
+        return { jumpDuckInstructions: combinedInstructions, startRestartInstruction };
+    }
+
+    // --- PARALLAX LAYER CLASS (Now manages discrete, random mountains) ---
+    class ParallaxLayer {
+        constructor(color, speedFactor, minHeight, maxHeight, minGap, maxGap) {
+            this.color = color;
+            this.speedFactor = speedFactor; 
+            this.minHeight = minHeight;     
+            this.maxHeight = maxHeight;     
+            this.minGap = minGap;
+            this.maxGap = maxGap;
+            
+            this.mountains = []; 
+            
+            this.PEAK_FLATNESS_WIDTH = 30; 
+            this.PEAK_ROUNDNESS_HEIGHT = 5; 
+            
+            // Initial generation: fill the screen from the left edge (x=0)
+            this.nextSpawnX = this.fillScreen(0); 
+        }
+
+        createMountain(startX) {
+            const minW = this.minHeight * 2; 
+            const maxW = this.maxHeight * 3;
+            const mountainWidth = minW + Math.random() * (maxW - minW);
+            
+            const mountainHeight = this.minHeight + Math.random() * (this.maxHeight - this.minHeight);
+            const gap = this.minGap + Math.random() * (this.maxGap - this.minGap);
+            
+            this.mountains.push({
+                x: startX,
+                width: mountainWidth,
+                height: mountainHeight
+            });
+
+            return startX + mountainWidth + gap;
+        }
+        
+        fillScreen(startX) {
+            let currentX = startX;
+            while (currentX < CANVAS_WIDTH) {
+                currentX = this.createMountain(currentX);
+            }
+            return currentX; 
+        }
+
+
+        update() {
+            // Use BASE_SPEED for movement when the game is not playing (title/gameover)
+            const currentSpeed = isPlaying ? gameSpeed : BASE_SPEED;
+            const speed = currentSpeed * this.speedFactor;
+
+            // 1. Move existing mountains and the next spawn point
+            this.mountains.forEach(m => m.x -= speed);
+            this.nextSpawnX -= speed;
+            
+            // 2. Remove off-screen mountains
+            this.mountains = this.mountains.filter(m => m.x + m.width > 0);
+            
+            // 3. Check if it's time to generate a new mountain
+            if (this.nextSpawnX < CANVAS_WIDTH + currentSpeed) { 
+                this.nextSpawnX = this.createMountain(this.nextSpawnX);
+            }
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            
+            this.mountains.forEach(m => {
+                ctx.beginPath();
+                
+                const baseX1 = m.x;
+                const baseX2 = m.x + m.width;
+                
+                const peakX = baseX1 + (m.width / 2); 
+                const peakY = GROUND_Y - m.height;
+
+                ctx.moveTo(baseX1, GROUND_Y); 
+
+                const peakLeftX = peakX - this.PEAK_FLATNESS_WIDTH / 2;
+                const peakLeftY = peakY + this.PEAK_ROUNDNESS_HEIGHT; 
+                ctx.lineTo(peakLeftX, peakLeftY); 
+                
+                const peakRightX = peakX + this.PEAK_FLATNESS_WIDTH / 2;
+                ctx.lineTo(peakRightX, peakLeftY); 
+                
+                ctx.lineTo(baseX2, GROUND_Y); 
+                
+                ctx.closePath();
+                
+                ctx.fill();
+            });
+        }
+    }
+    
+    // --- GAME OBJECTS ---
+    class Dino {
+        constructor() {
+            this.x = 50;
+            this.y = GROUND_Y - DINO_SIZE; 
+            this.width = DINO_SIZE;
+            this.height = DINO_SIZE;
+            this.dy = 0;
+            this.isJumping = false;
+            this.isDucking = false;
+            this.frame = 0;
+            this.timeSinceLastFrame = 0; 
+            this.duckHeight = DINO_SIZE * 0.5;
+            this.isHoldingJump = false; // Tracks if the jump key/touch is currently active
+        }
+
+        draw() {
+            ctx.fillStyle = COLOR_DARK;
+            
+            const currentY = this.y;
+            const currentHeight = this.isDucking ? this.duckHeight : this.height;
+            
+            ctx.fillRect(this.x, currentY, this.width, currentHeight);
+            
+            // Fix: Standardize the eye's horizontal position (about 60% across the 40px body = 24px)
+            const eyeX = this.x + this.width * 0.6; 
+
+            if (!this.isDucking) {
+                // Head/Snout
+                ctx.fillRect(this.x + this.width, currentY + currentHeight * 0.6, 6, 8); 
+                
+                // Eye (Standing/Jumping)
+                ctx.fillStyle = COLOR_DARKEST;
+                ctx.fillRect(eyeX, currentY + 8, 8, 4); 
+            } else {
+                // Ducking Eye (Now uses the same forward position as standing)
+                ctx.fillStyle = COLOR_DARKEST;
+                ctx.fillRect(eyeX, currentY + 4, 8, 2); 
+            }
+
+            if (!this.isJumping && !this.isDucking) {
+                // Running Legs
+                ctx.fillStyle = COLOR_DARKEST;
+                const legWidth = 8;
+                const legHeight = 5;
+                
+                if (this.frame === 0) {
+                    ctx.fillRect(this.x + 8, currentY + currentHeight - legHeight, legWidth, legHeight);
+                    ctx.fillRect(this.x + 24, currentY + currentHeight - legHeight, legWidth, legHeight);
+                } else {
+                    ctx.fillRect(this.x + 4, currentY + currentHeight - legHeight, legWidth, legHeight);
+                    ctx.fillRect(this.x + 28, currentY + currentHeight - legHeight, legWidth, legHeight);
+                }
+            } else {
+                // Jumping/Ducking support foot
+                ctx.fillStyle = COLOR_DARKEST;
+                ctx.fillRect(this.x + 10, currentY + currentHeight - 5, 20, 5); 
+            }
+            
+            // NEW: Draw Hit Box
+            if (showHitBoxes) {
+                this.drawHitBox(currentY, currentHeight);
+            }
+        }
+        
+        // NEW: Method to draw the Dino's hitbox
+        drawHitBox(currentY, currentHeight) {
+            ctx.strokeStyle = HITBOX_DINO_COLOR;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(this.x, currentY, this.width, currentHeight);
+        }
+
+        update(deltaTime) { 
+            if (this.isJumping) {
+                
+                // 1. Core Gravity Application
+                this.dy += GRAVITY; 
+                
+                // 2. Variable Jump Logic: Cut jump short if released while moving up
+                // If moving upwards (dy < 0) AND the jump button is not held down, increase gravity
+                if (this.dy < 0 && !this.isHoldingJump) {
+                    this.dy += JUMP_CUT_FACTOR; 
+                }
+                
+                this.y += this.dy;
+
+                if (this.y >= GROUND_Y - DINO_SIZE) {
+                    this.y = GROUND_Y - DINO_SIZE;
+                    this.isJumping = false;
+                    this.isHoldingJump = false; // Reset hold status
+                    this.dy = 0;
+                }
+            }
+            
+            if (!this.isJumping) {
+                if (this.isDucking) {
+                     this.y = GROUND_Y - this.duckHeight; 
+                } else {
+                     this.y = GROUND_Y - DINO_SIZE;
+                }
+            }
+
+            // Animate only when running
+            if (!this.isJumping && !this.isDucking) {
+                 this.timeSinceLastFrame += deltaTime; 
+                 // Dino animation tied to ANIMATION_FRAME_RATE
+                 if (this.timeSinceLastFrame > (1000 / ANIMATION_FRAME_RATE)) {
+                    this.frame = 1 - this.frame; 
+                    this.timeSinceLastFrame = 0;
+                 }
+            } else {
+                this.frame = 0;
+                this.timeSinceLastFrame = 0;
+            }
+        }
+
+        jump() {
+            if (!this.isJumping && !this.isDucking) {
+                this.isJumping = true;
+                this.isHoldingJump = true; // Start hold when jump initiates
+                this.dy = -DINO_JUMP_VELOCITY;
+                playJumpSound();
+            }
+        }
+
+        duck(isDown) {
+            this.isDucking = isDown && !this.isJumping;
+            
+            if (this.isDucking) {
+                 this.y = GROUND_Y - this.duckHeight;
+            } else if (!this.isJumping) {
+                 this.y = GROUND_Y - DINO_SIZE;
+            }
+        }
+    }
+
+    class Obstacle {
+        constructor(type) {
+            this.type = type; 
+            this.x = CANVAS_WIDTH;
+            
+            if (this.type === 'cactus') {
+                // --- NEW: Random Cactus Height and corresponding width ---
+                const MIN_H = 30;
+                const MAX_H = 70;
+                this.height = MIN_H + Math.random() * (MAX_H - MIN_H);
+                
+                // Cacti get slightly wider the taller they are (20px min width)
+                const widthFactor = (this.height - MIN_H) / (MAX_H - MIN_H); 
+                const MIN_W = 20;
+                const MAX_W = 35;
+                this.width = MIN_W + widthFactor * (MAX_W - MIN_W); 
+                
+                this.y = GROUND_Y - this.height; 
+            } else { // type is 'bird'
+                // Bird obstacle remains consistent in size but varies in flight height
+                this.width = 40; 
+                this.height = 20;
+                const flightHeight = DINO_SIZE * (0.7 + Math.random() * 0.1); 
+                this.y = GROUND_Y - this.height - flightHeight; 
+                this.frame = 0; 
+                this.frameTimer = 0; 
+            }
+        }
+
+        draw() {
+            ctx.fillStyle = COLOR_DARKEST;
+
+            if (this.type === 'cactus') {
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                // Draw a side arm (relative to the variable height and width)
+                ctx.fillRect(this.x + this.width * 0.7, this.y + this.height * 0.4, 4, 15);
+            } else { // type is 'bird'
+                const bodyW = 15;
+                const bodyH = 8;
+                const eyeSize = 3;
+                
+                // New wing dimensions for bat shape
+                const wingW = 18; 
+                const wingH = 18; 
+
+                // Center the bird graphic relative to its collision box
+                const centerBodyX = this.x + this.width / 2;
+                const centerBodyY = this.y + this.height / 2; 
+
+                // 1. Draw the small body (COLOR_DARK)
+                ctx.fillStyle = COLOR_DARK;
+                const bodyX = centerBodyX - bodyW / 2;
+                const bodyY = centerBodyY - bodyH / 2;
+                ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
+                
+                // 2. Wing position based on frame
+                // Frame 0: Wings up (Y offset negative), Frame 1: Wings down (Y offset positive)
+                const wingYOffset = this.frame === 0 ? -8 : 8; 
+                
+                // Wing Anchor: The point where the wing connects to the body (center vertical line)
+                const anchorY = bodyY + bodyH / 2;
+
+                // --- 3. Draw Left Wing (Bat Shape) ---
+                ctx.fillStyle = COLOR_DARKEST;
+                ctx.beginPath();
+                
+                // Point 1: Anchor near body (left side)
+                ctx.moveTo(bodyX, anchorY); 
+                
+                // Point 2: Outer Tip (furthest left and highest/lowest based on frame)
+                const outerTipX = bodyX - wingW;
+                const outerTipY = anchorY + wingYOffset; 
+                ctx.lineTo(outerTipX, outerTipY);
+                
+                // Point 3: Trailing Edge (lower/inner corner, creates the membrane effect)
+                const trailingEdgeX = bodyX - 5;
+                const trailingEdgeY = anchorY + bodyH / 2 + wingYOffset + 5; 
+                ctx.lineTo(trailingEdgeX, trailingEdgeY);
+
+                ctx.closePath();
+                ctx.fill();
+
+                // --- 4. Draw Right Wing (Bat Shape - mirrored) ---
+                ctx.fillStyle = COLOR_DARKEST;
+                ctx.beginPath();
+                
+                // Point 1: Anchor near body (right side)
+                ctx.moveTo(bodyX + bodyW, anchorY); 
+                
+                // Point 2: Outer Tip (furthest right and highest/lowest based on frame)
+                const outerTipRX = bodyX + bodyW + wingW;
+                const outerTipRY = anchorY + wingYOffset; 
+                ctx.lineTo(outerTipRX, outerTipRY);
+                
+                // Point 3: Trailing Edge (lower/inner corner)
+                const trailingEdgeRX = bodyX + bodyW + 5;
+                const trailingEdgeRY = anchorY + bodyH / 2 + wingYOffset + 5;
+                ctx.lineTo(trailingEdgeRX, trailingEdgeRY);
+
+                ctx.closePath();
+                ctx.fill();
+                
+                // 5. Draw Eye (towards left side of the body)
+                ctx.fillStyle = COLOR_LIGHTEST; 
+                ctx.fillRect(bodyX + 2, bodyY + 2, eyeSize, eyeSize);
+            }
+            
+            // NEW: Draw Hit Box
+            if (showHitBoxes) {
+                this.drawHitBox();
+            }
+        }
+        
+        // NEW: Method to draw the Obstacle's hitbox
+        drawHitBox() {
+            ctx.strokeStyle = HITBOX_OBSTACLE_COLOR;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(this.x, this.y, this.width, this.height);
+        }
+
+        update(deltaTime) { 
+            this.x -= gameSpeed;
+
+            if (this.type === 'bird') {
+                 this.frameTimer += deltaTime;
+                 // Bird animation uses BIRD_FLAP_RATE for independent, slightly faster flapping
+                 if (this.frameTimer > (1000 / BIRD_FLAP_RATE)) { 
+                     this.frame = 1 - this.frame; 
+                     this.frameTimer = 0;
+                 }
+            }
+        }
+
+        isOffScreen() {
+            return this.x + this.width < 0;
+        }
+    }
+
+    // --- GAME FUNCTIONS ---
+    
+    function initializeGameAssets() {
+        // Initialize Parallax Layers with Random/Discrete Mountains
+        // Note: speedFactor is used against BASE_SPEED when the game is not playing
+        parallaxLayers = [
+            // Farthest Layer: Slowest (0.1), Taller (80-120px), Wide Gaps (600-1200)
+            new ParallaxLayer(COLOR_FARTHEST, 0.1, 80, 120, 600, 1200), 
+            // Near Layer: Faster (0.4), shorter (40-70px), Smaller Gaps (300-600)
+            new ParallaxLayer(COLOR_LIGHT, 0.4, 40, 70, 300, 600),
+        ];
+    }
+    
+    // Draws the solid ground line only (used for title/gameover screens)
+    function drawStaticGroundLine() {
+        ctx.strokeStyle = COLOR_DARK;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, GROUND_Y);
+        ctx.lineTo(CANVAS_WIDTH, GROUND_Y);
+        ctx.stroke();
+    }
+
+    // Draws the ground with moving dots (used only when playing)
+    function drawMovingGround() {
+        drawStaticGroundLine(); 
+
+        // 2. Draw moving ground dots/texture
+        ctx.fillStyle = COLOR_LIGHT;
+        // The moving offset gives the illusion of speed/texture
+        const offset = (Math.floor(score) * 0.1 * 10) % 10; 
+        
+        for (let i = -CANVAS_WIDTH; i < CANVAS_WIDTH * 2; i += 15) {
+             const xPos = (i + offset) % CANVAS_WIDTH;
+             if (xPos >= 0) {
+                 ctx.fillRect(xPos, GROUND_Y - 8, 4, 2);
+             }
+        }
+    }
+
+
+    function init() {
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+        
+        // NEW: Detect device type immediately
+        isTouch = isTouchDevice();
+        
+        // NEW: Get the copyright footer element and show it on initial load
+        copyrightFooter = document.getElementById('copyright-footer');
+        copyrightFooter.classList.remove('hidden');
+
+        window.addEventListener('resize', resizeCanvas, false);
+        resizeCanvas();
+        
+        // Initialize assets and immediately start the main loop
+        initializeGameAssets();
+        
+        // NEW: Get instructions based on device
+        const { jumpDuckInstructions, startRestartInstruction } = getInstructions();
+
+        document.getElementById('message-box').classList.remove('hidden');
+        
+        // MODIFIED: Added blink-text class to the start instruction paragraph
+        // The jumpDuckInstructions now contain the <span> elements
+        document.getElementById('message-box').innerHTML = 
+            `<h2>DINO DASH</h2><p class="mt-4 text-xs">${jumpDuckInstructions}</p><p class="mt-4 text-xs blink-text">${startRestartInstruction}</p>`; 
+
+        // Keyboard Controls
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+        
+        // Desktop Click/Start Control
+        document.addEventListener('mousedown', handleDesktopStartJump);
+
+        // --- MOBILE TOUCH CONTROLS ---
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd);
+        // -----------------------------
+        
+        const storedHighScore = localStorage.getItem('dinoDashHighScore');
+        // --- MODIFIED: Set default high score to 300 ---
+        highScore = storedHighScore ? parseInt(storedHighScore) : 300; 
+        // -----------------------------------------------
+        updateScoreDisplay();
+        
+        document.getElementById('current-score-column').classList.add('hidden');
+        document.getElementById('level-column').classList.add('hidden'); 
+        
+        // Start the continuous animation loop
+        requestAnimationFrame(gameLoop);
+    }
+
+    function resizeCanvas() {
+        const container = document.querySelector('.game-container');
+        const ratio = CANVAS_WIDTH / CANVAS_HEIGHT;
+        let newWidth = container.offsetWidth;
+        let newHeight = newWidth / ratio;
+        
+        const containerMaxHeight = container.offsetHeight;
+        if (newHeight > containerMaxHeight) {
+            newHeight = containerMaxHeight;
+            newWidth = newHeight * ratio;
+        }
+        
+        canvas.style.width = `${newWidth}px`;
+        canvas.style.height = `${newHeight}px`;
+    }
+
+    async function startGame() {
+        if (Tone.context.state !== 'running') {
+            await Tone.start();
+        }
+        initAudio();
+
+        if (isPlaying) return;
+
+        isPlaying = true;
+        dino = new Dino();
+        obstacles = [];
+        gameSpeed = BASE_SPEED;
+        score = 0;
+        level = 1; 
+        lastThresholdPassed = 0;
+        
+        document.getElementById('message-box').classList.add('hidden');
+        
+        // HIDE the copyright footer during gameplay
+        copyrightFooter.classList.add('hidden'); 
+        
+        document.getElementById('current-score-column').classList.remove('hidden'); 
+        document.getElementById('level-column').classList.remove('hidden'); 
+    }
+
+    function gameOver() {
+        isPlaying = false;
+        playGameOverSound(); 
+        
+        const currentFinalScore = Math.floor(score); 
+        let scoreLabel = 'Score';
+        
+        // The high score should already be updated in updateSpeed, 
+        // but we'll ensure it's saved one last time here.
+        if (currentFinalScore > highScore) {
+            highScore = currentFinalScore;
+            localStorage.setItem('dinoDashHighScore', highScore);
+            scoreLabel = 'New Hi Score'; // Set label to highlight the achievement
+        }
+        
+        document.getElementById('current-score-column').classList.add('hidden'); 
+        document.getElementById('level-column').classList.add('hidden'); 
+
+        document.getElementById('message-box').classList.remove('hidden');
+        
+        // HIDE the copyright footer during the game over screen
+        copyrightFooter.classList.add('hidden'); 
+        
+        // NEW: Get restart instruction (now unified to "TAP TO RESTART")
+        const restartText = getInstructions(true);
+
+        // MODIFIED: Added blink-text class to the restart instruction paragraph
+        document.getElementById('message-box').innerHTML = 
+            `<h2>GAME OVER</h2>
+             <p class="final-score-label">${scoreLabel}</p>
+             <p class="final-score-number">${currentFinalScore}</p>
+             <p class="mt-4 text-xs blink-text">${restartText}</p>`;
+        
+        updateScoreDisplay();
+    }
+
+    function updateScoreDisplay() {
+        document.getElementById('score-value').textContent = Math.floor(score);
+        document.getElementById('high-score-value').textContent = highScore;
+        document.getElementById('level-value').textContent = level; 
+    }
+
+    // --- Input Handlers ---
+    function handleDesktopStartJump(e) {
+        if (e.button === 2) { 
+            e.preventDefault(); 
+            return;
+        }
+
+        if (!isPlaying) {
+            startGame();
+        } else if (!dino.isJumping) {
+            dino.jump();
+        }
+    }
+    
+    function handleTouchStart(e) {
+        e.preventDefault();
+        
+        if (!isPlaying) {
+            startGame();
+            return;
+        }
+
+        const touchX = e.touches[0].clientX;
+        const rect = canvas.getBoundingClientRect();
+        
+        const relativeX = touchX - rect.left;
+        const canvasWidthPx = rect.width;
+
+        if (relativeX < canvasWidthPx / 2) {
+            dino.jump();
+        } else {
+            dino.duck(true);
+        }
+    }
+
+    function handleTouchEnd(e) {
+        dino.duck(false);
+        // NEW: Release jump hold on any touchend to allow for jump cut
+        if (isPlaying) {
+            dino.isHoldingJump = false; 
+        }
+    }
+
+    function handleKeyDown(e) {
+        if (e.key === 'ArrowUp' || e.key === ' ') { 
+            e.preventDefault();
+            if (!isPlaying) {
+                startGame();
+            } else {
+                dino.jump();
+            }
+        } else if (e.key === 'ArrowDown' || e.key === 'd' || e.key === 'D') { 
+            e.preventDefault(); 
+            dino.duck(true);
+        } else if (e.key === 'h' || e.key === 'H') { // NEW: Toggle Hitbox Visibility
+            if (!isTouch) { // Only allow keyboard toggle on desktop/non-touch devices
+                showHitBoxes = !showHitBoxes;
+            }
+        }
+    }
+
+    function handleKeyUp(e) {
+        if (e.key === 'ArrowDown' || e.key === 'd' || e.key === 'D') {
+            dino.duck(false);
+        }
+        // NEW: Release jump hold on key up for jump keys
+        if (e.key === 'ArrowUp' || e.key === ' ') {
+            if (isPlaying) {
+                dino.isHoldingJump = false;
+            }
+        }
+    }
+    
+    // --- Game Logic ---
+
+    function generateObstacle() {
+        const minDistance = 250;
+        const maxDistance = 500;
+        const lastObstacle = obstacles[obstacles.length - 1];
+        
+        const requiredGap = Math.random() * (maxDistance - minDistance) + minDistance;
+
+        if (!lastObstacle || CANVAS_WIDTH - lastObstacle.x > requiredGap) {
+            // Obstacle logic: 60% chance of cactus, 40% chance of bird
+            const type = Math.random() > 0.6 ? 'bird' : 'cactus'; 
+            obstacles.push(new Obstacle(type));
+        }
+    }
+    
+    function checkCollision(dino, obstacle) {
+        const dX = dino.x;
+        const dW = dino.width;
+        
+        const dH = dino.isDucking ? dino.duckHeight : dino.height;
+        const dY = dino.y; 
+
+        const oX = obstacle.x;
+        const oY = obstacle.y;
+        const oW = obstacle.width;
+        const oH = obstacle.height;
+        
+        // Collision detection for simple bounding boxes
+        return dX < oX + oW &&
+               dX + dW > oX &&
+               dY < oY + oH &&
+               dY + dH > oY;
+    }
+
+    function updateSpeed() { 
+        score += 0.1;
+        const newScoreFloor = Math.floor(score);
+        
+        // --- MODIFICATION START: Real-time High Score Update ---
+        if (newScoreFloor > highScore) {
+            highScore = newScoreFloor;
+        }
+        // --- MODIFICATION END ---
+        
+        // Calculate the highest score multiple of SCORE_THRESHOLD achieved so far (e.g., 30, 60, 90...)
+        const currentThreshold = Math.floor(newScoreFloor / SCORE_THRESHOLD) * SCORE_THRESHOLD;
+
+        if (currentThreshold > lastThresholdPassed) {
+            
+            if (gameSpeed < MAX_SPEED) {
+                gameSpeed = Math.min(MAX_SPEED, gameSpeed + SPEED_INCREMENT_RATE);
+                level++; 
+            }
+            
+            playScoreSound();
+            
+            lastThresholdPassed = currentThreshold;
+        }
+        
+        updateScoreDisplay();
+    }
+
+    function gameLoop(currentTime) {
+        if (lastTime === 0) lastTime = currentTime;
+        const deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+        
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        
+        // --- PARALLAX BACKGROUND (ALWAYS UPDATES AND DRAWS) ---
+        for(const layer of parallaxLayers) {
+            layer.update(); 
+            layer.draw();
+        }
+        
+        if (isPlaying) {
+            // --- GAME IN PROGRESS LOGIC ---
+            
+            updateSpeed(); 
+            dino.update(deltaTime); // Pass deltaTime to Dino
+            generateObstacle();
+
+            // Update and Draw Obstacles
+            for (let i = 0; i < obstacles.length; i++) {
+                const obstacle = obstacles[i];
+                
+                if (checkCollision(dino, obstacle)) {
+                    gameOver();
+                    // Don't draw Dino or obstacles after game over is triggered in a single loop cycle
+                    requestAnimationFrame(gameLoop);
+                    return; 
+                }
+
+                obstacle.update(deltaTime); // Pass deltaTime to Obstacle
+                obstacle.draw();
+            }
+
+            drawMovingGround();
+            dino.draw();
+
+            obstacles = obstacles.filter(obs => !obs.isOffScreen());
+
+        } else {
+            // --- TITLE/GAMEOVER SCREEN LOGIC ---
+            // Draw only the static ground line below the moving mountains
+            drawStaticGroundLine(); 
+        }
+
+        // Loop is now continuous
+        requestAnimationFrame(gameLoop);
+    }
+
+    window.onload = init;
+
+</script>
+</body>
+</html>
